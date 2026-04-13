@@ -1,5 +1,6 @@
 import SwiftUI
 
+@MainActor
 class AppDelegate: NSObject, NSApplicationDelegate {
     let appState = AppState()
     var setupWindow: NSWindow?
@@ -96,10 +97,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             object: window,
             queue: .main
         ) { [weak self] _ in
-            if self?.setupWindow == nil {
-                NSApp.setActivationPolicy(.accessory)
+            Task { @MainActor in
+                if self?.setupWindow == nil {
+                    NSApp.setActivationPolicy(.accessory)
+                }
+                self?.settingsWindow = nil
             }
-            self?.settingsWindow = nil
         }
     }
 
@@ -107,7 +110,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.regular)
 
         let setupView = SetupView(onComplete: { [weak self] in
-            self?.completeSetup()
+            Task { @MainActor in
+                self?.completeSetup()
+            }
         })
         .environmentObject(appState)
 

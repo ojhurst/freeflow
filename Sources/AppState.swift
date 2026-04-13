@@ -681,6 +681,7 @@ final class AppState: ObservableObject, @unchecked Sendable {
         hasScreenRecordingPermission = CGPreflightScreenCaptureAccess()
     }
 
+    @MainActor
     func openScreenCaptureSettings() {
         let settingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
         if let url = settingsURL {
@@ -923,7 +924,9 @@ final class AppState: ObservableObject, @unchecked Sendable {
             statusText = "No Accessibility"
             activeRecordingTriggerMode = nil
             shortcutSessionController.reset()
-            showAccessibilityAlert()
+            Task { @MainActor [weak self] in
+                self?.showAccessibilityAlert()
+            }
             return
         }
         os_log(.info, log: recordingLog, "accessibility check passed: %.3fms", (CFAbsoluteTimeGetCurrent() - t0) * 1000)
@@ -940,7 +943,7 @@ final class AppState: ObservableObject, @unchecked Sendable {
             return true
         case .notDetermined:
             AVCaptureDevice.requestAccess(for: .audio) { [weak self] granted in
-                DispatchQueue.main.async {
+                Task { @MainActor [weak self] in
                     if granted {
                         guard let self, let triggerMode = self.activeRecordingTriggerMode else { return }
                         self.beginRecording(triggerMode: triggerMode)
@@ -959,7 +962,9 @@ final class AppState: ObservableObject, @unchecked Sendable {
             statusText = "No Microphone"
             activeRecordingTriggerMode = nil
             shortcutSessionController.reset()
-            showMicrophonePermissionAlert()
+            Task { @MainActor [weak self] in
+                self?.showMicrophonePermissionAlert()
+            }
             return false
         }
     }
@@ -1049,6 +1054,7 @@ final class AppState: ObservableObject, @unchecked Sendable {
         return "Failed to start recording: \(error.localizedDescription)"
     }
 
+    @MainActor
     func showMicrophonePermissionAlert() {
         let alert = NSAlert()
         alert.messageText = "Microphone Permission Required"
@@ -1067,6 +1073,7 @@ final class AppState: ObservableObject, @unchecked Sendable {
         }
     }
 
+    @MainActor
     func showAccessibilityAlert() {
         let alert = NSAlert()
         alert.messageText = "Accessibility Permission Required"
@@ -1417,6 +1424,7 @@ final class AppState: ObservableObject, @unchecked Sendable {
         return trimmed.isEmpty ? nil : trimmed
     }
 
+    @MainActor
     private func handleScreenshotCaptureIssue(_ message: String?) {
         guard let message, !message.isEmpty else {
             hasShownScreenshotPermissionAlert = false
@@ -1453,6 +1461,7 @@ final class AppState: ObservableObject, @unchecked Sendable {
         return lowered.contains("permission") || lowered.contains("screen recording")
     }
 
+    @MainActor
     private func showScreenshotPermissionAlert(message: String) {
         let alert = NSAlert()
         alert.messageText = "Screen Recording Permission Required"
@@ -1468,6 +1477,7 @@ final class AppState: ObservableObject, @unchecked Sendable {
         }
     }
 
+    @MainActor
     private func showScreenshotCaptureErrorAlert(message: String) {
         let alert = NSAlert()
         alert.messageText = "Screenshot Capture Failed"
