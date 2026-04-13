@@ -417,7 +417,7 @@ struct GeneralSettingsView: View {
                     .textFieldStyle(.roundedBorder)
                     .font(.system(.body, design: .monospaced))
                     .disabled(isValidatingKey)
-                    .onChange(of: apiKeyInput) { _ in
+                    .onChange(of: apiKeyInput) {
                         keyValidationError = nil
                         keyValidationSuccess = false
                     }
@@ -451,7 +451,7 @@ struct GeneralSettingsView: View {
                 TextField("https://api.groq.com/openai/v1", text: $apiBaseURLInput)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(.body, design: .monospaced))
-                    .onChange(of: apiBaseURLInput) { newValue in
+                    .onChange(of: apiBaseURLInput) { _, newValue in
                         let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
                         if !trimmed.isEmpty {
                             appState.apiBaseURL = trimmed
@@ -627,7 +627,7 @@ struct GeneralSettingsView: View {
                     RoundedRectangle(cornerRadius: 6)
                         .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
                 )
-                .onChange(of: customVocabularyInput) { newValue in
+                .onChange(of: customVocabularyInput) { _, newValue in
                     appState.customVocabulary = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
                 }
 
@@ -841,7 +841,7 @@ struct PromptsSettingsView: View {
                     RoundedRectangle(cornerRadius: 6)
                         .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
                 )
-                .onChange(of: customSystemPromptInput) { newValue in
+                .onChange(of: customSystemPromptInput) { _, newValue in
                     let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
                     let defaultTrimmed = PostProcessingService.defaultSystemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
                     if trimmed == defaultTrimmed || trimmed.isEmpty {
@@ -1062,7 +1062,7 @@ struct PromptsSettingsView: View {
                     RoundedRectangle(cornerRadius: 6)
                         .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
                 )
-                .onChange(of: customContextPromptInput) { newValue in
+                .onChange(of: customContextPromptInput) { _, newValue in
                     let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
                     let defaultTrimmed = AppContextService.defaultContextPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
                     if trimmed == defaultTrimmed || trimmed.isEmpty {

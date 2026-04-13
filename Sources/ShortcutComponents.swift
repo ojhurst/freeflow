@@ -60,7 +60,7 @@ struct DictationShortcutEditor: View {
                     .foregroundStyle(.orange)
             }
         }
-        .onChange(of: activeCaptureRole) { role in
+        .onChange(of: activeCaptureRole) { _, role in
             onCaptureStateChange?(role != nil)
         }
         .onDisappear {

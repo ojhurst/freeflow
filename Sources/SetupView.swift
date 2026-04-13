@@ -152,7 +152,7 @@ struct SetupView: View {
             screenRecordingTimer?.invalidate()
             appState.resumeHotkeyMonitoringAfterShortcutCapture()
         }
-        .onChange(of: isCapturingShortcut) { isCapturing in
+        .onChange(of: isCapturingShortcut) { _, isCapturing in
             if isCapturing {
                 appState.suspendHotkeyMonitoringForShortcutCapture()
             } else {
@@ -348,7 +348,7 @@ struct SetupView: View {
                         .textFieldStyle(.roundedBorder)
                         .font(.system(.body, design: .monospaced))
                         .disabled(isValidatingKey)
-                        .onChange(of: apiKeyInput) { _ in
+                        .onChange(of: apiKeyInput) {
                             keyValidationError = nil
                         }
 
