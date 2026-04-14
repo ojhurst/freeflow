@@ -514,14 +514,14 @@ Selected text: \(selectedText ?? "None")
             return nil
         }
 
-        let candidateRects = [focusedWindowBounds].compactMap { $0 } + shareableContent.displays.map(\.frame)
-        let unionRect = candidateRects.reduce(CGRect.null) { partial, rect in
-            partial.isNull ? rect : partial.union(rect)
-        }
-        guard !unionRect.isNull else {
+        guard let display = relevantDisplay(
+            from: shareableContent.displays,
+            focusedWindowBounds: focusedWindowBounds
+        ) else {
             return nil
         }
-        return await captureImage(in: unionRect)
+
+        return await captureImage(in: display.frame)
     }
 
     private func currentShareableContent() async -> SCShareableContent? {
@@ -556,6 +556,65 @@ Selected text: \(selectedText ?? "None")
                 continuation.resume(returning: image)
             }
         }
+    }
+
+    private func relevantDisplay(
+        from displays: [SCDisplay],
+        focusedWindowBounds: CGRect?
+    ) -> SCDisplay? {
+        guard !displays.isEmpty else {
+            return nil
+        }
+
+        if let focusedWindowBounds, !focusedWindowBounds.isNull {
+            let focusedCenter = CGPoint(
+                x: focusedWindowBounds.midX,
+                y: focusedWindowBounds.midY
+            )
+
+            if let containingDisplay = displays.first(where: { $0.frame.contains(focusedCenter) }) {
+                return containingDisplay
+            }
+
+            return displays.min {
+                distanceSquared(from: focusedCenter, to: $0.frame) < distanceSquared(from: focusedCenter, to: $1.frame)
+            }
+        }
+
+        if let mainDisplay = displays.first(where: { $0.displayID == CGMainDisplayID() }) {
+            return mainDisplay
+        }
+
+        let cursorLocation = NSEvent.mouseLocation
+        if let cursorDisplay = displays.first(where: { $0.frame.contains(cursorLocation) }) {
+            return cursorDisplay
+        }
+
+        return displays.min {
+            distanceSquared(from: cursorLocation, to: $0.frame) < distanceSquared(from: cursorLocation, to: $1.frame)
+        }
+    }
+
+    private func distanceSquared(from point: CGPoint, to rect: CGRect) -> CGFloat {
+        let deltaX: CGFloat
+        if point.x < rect.minX {
+            deltaX = rect.minX - point.x
+        } else if point.x > rect.maxX {
+            deltaX = point.x - rect.maxX
+        } else {
+            deltaX = 0
+        }
+
+        let deltaY: CGFloat
+        if point.y < rect.minY {
+            deltaY = rect.minY - point.y
+        } else if point.y > rect.maxY {
+            deltaY = point.y - rect.maxY
+        } else {
+            deltaY = 0
+        }
+
+        return (deltaX * deltaX) + (deltaY * deltaY)
     }
 
     private func displayScaleFactor(containing rect: CGRect) -> CGFloat {
