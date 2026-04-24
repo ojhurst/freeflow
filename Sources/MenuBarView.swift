@@ -11,8 +11,8 @@ struct MenuBarView: View {
     var body: some View {
         VStack(spacing: 4) {
             Text("FreeFlow v\(appVersion)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.primary)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 4)
 
