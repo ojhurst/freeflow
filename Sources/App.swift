@@ -13,6 +13,7 @@ struct FreeFlowApp: App {
             MenuBarLabel()
                 .environmentObject(appDelegate.appState)
         }
+        .menuBarExtraStyle(.window)
     }
 }
 
