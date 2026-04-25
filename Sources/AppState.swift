@@ -214,7 +214,7 @@ final class AppState: ObservableObject, @unchecked Sendable {
     private let realtimeStreamingEnabledStorageKey = "realtime_streaming_enabled"
     private let realtimeStreamingModelStorageKey = "realtime_streaming_model"
     private let dictationAudioInterruptionEnabledStorageKey = "dictation_audio_interruption_enabled"
-    private let transcribingIndicatorDelay: TimeInterval = 0.25
+    private let transcribingIndicatorDelay: TimeInterval = 1.0
     private let pasteAfterShortcutReleaseDelay: TimeInterval = 0.03
     private let pressEnterAfterPasteDelay: TimeInterval = 0.08
     private let clipboardRestoreDelay: TimeInterval = 1.0

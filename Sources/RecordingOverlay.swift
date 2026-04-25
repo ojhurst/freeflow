@@ -393,29 +393,21 @@ struct WaveformView: View {
 }
 
 struct ProcessingWaveformView: View {
-    private static let barCount = 9
-    private static let multipliers: [CGFloat] = [0.42, 0.58, 0.76, 0.9, 1.0, 0.9, 0.76, 0.58, 0.42]
+    @State private var rotation: Double = 0
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: false)) { context in
-            let time = context.date.timeIntervalSinceReferenceDate
-
-            HStack(spacing: 2.5) {
-                ForEach(0..<Self.barCount, id: \.self) { index in
-                    let wave = 0.5 + 0.5 * sin((time * 5.6) - Double(index) * 0.5)
-                    let shimmer = 0.5 + 0.5 * sin((time * 2.8) + Double(index) * 0.75)
-                    let amplitude = min(
-                        0.16 + CGFloat(wave) * Self.multipliers[index] * 0.52 + CGFloat(shimmer) * 0.08,
-                        1.0
-                    )
-
-                    WaveformBar(amplitude: amplitude)
-                        .opacity(0.45 + CGFloat(wave) * 0.5)
+        Circle()
+            .trim(from: 0.1, to: 0.9)
+            .stroke(Color.white, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+            .frame(width: 16, height: 16)
+            .rotationEffect(.degrees(rotation))
+            .frame(height: 20)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .onAppear {
+                withAnimation(.linear(duration: 0.8).repeatForever(autoreverses: false)) {
+                    rotation = 360
                 }
             }
-            .frame(height: 20)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
