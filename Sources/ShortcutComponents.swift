@@ -112,6 +112,20 @@ struct ShortcutRoleSection: View {
                     .foregroundStyle(.red)
             }
         }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color(nsColor: .controlBackgroundColor).opacity(0.3))
+        )
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(isFocused ? Color.blue.opacity(0.08) : Color.clear)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(isFocused ? Color.blue : Color.primary.opacity(0.08), lineWidth: isFocused ? 2 : 1)
+        )
+        .id(role)
     }
 }
 
