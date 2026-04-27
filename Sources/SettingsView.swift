@@ -32,6 +32,36 @@ private struct SettingsCard<Content: View>: View {
     }
 }
 
+private struct SettingsSubcard<Content: View>: View {
+    let title: String?
+    let content: Content
+
+    init(_ title: String? = nil, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let title {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+            }
+            content
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color(nsColor: .controlBackgroundColor).opacity(0.3))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+        )
+    }
+}
+
 private let iso8601DayFormatter: DateFormatter = {
     let formatter = DateFormatter()
     formatter.dateFormat = "yyyy-MM-dd"
@@ -1055,52 +1085,57 @@ struct GeneralSettingsView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            Picker("Invocation Style", selection: Binding(
-                get: { appState.commandModeStyle },
-                set: { newValue in
-                    _ = appState.setCommandModeStyle(newValue)
-                }
-            )) {
-                ForEach(CommandModeStyle.allCases) { style in
-                    Text(style.title).tag(style)
-                }
-            }
-            .pickerStyle(.segmented)
-            .disabled(!appState.isCommandModeEnabled)
+            SettingsSubcard("Invocation Style") {
+                VStack(alignment: .leading, spacing: 12) {
+                    Picker("Invocation Style", selection: Binding(
+                        get: { appState.commandModeStyle },
+                        set: { newValue in
+                            _ = appState.setCommandModeStyle(newValue)
+                        }
+                    )) {
+                        ForEach(CommandModeStyle.allCases) { style in
+                            Text(style.title).tag(style)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .disabled(!appState.isCommandModeEnabled)
 
-            Group {
-                switch appState.commandModeStyle {
-                case .automatic:
-                    Text("If text is selected, your normal dictation shortcut transforms the selection instead of dictating over it.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                case .manual:
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Hold the extra modifier together with your normal dictation shortcut to transform selected text.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    Group {
+                        switch appState.commandModeStyle {
+                        case .automatic:
+                            Text("If text is selected, your normal dictation shortcut transforms the selection instead of dictating over it.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        case .manual:
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Hold the extra modifier together with your normal dictation shortcut to transform selected text.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
 
-                        Picker("Extra Modifier", selection: Binding(
-                            get: { appState.commandModeManualModifier },
-                            set: { newValue in
-                                _ = appState.setCommandModeManualModifier(newValue)
-                            }
-                        )) {
-                            ForEach(CommandModeManualModifier.allCases) { modifier in
-                                Text(modifier.title).tag(modifier)
+                                Picker("Extra Modifier", selection: Binding(
+                                    get: { appState.commandModeManualModifier },
+                                    set: { newValue in
+                                        _ = appState.setCommandModeManualModifier(newValue)
+                                    }
+                                )) {
+                                    ForEach(CommandModeManualModifier.allCases) { modifier in
+                                        Text(modifier.title).tag(modifier)
+                                    }
+                                }
+                                .disabled(!appState.isCommandModeEnabled || appState.commandModeStyle != .manual)
                             }
                         }
-                        .disabled(!appState.isCommandModeEnabled || appState.commandModeStyle != .manual)
+                    }
+
+                    if let validationMessage = appState.commandModeManualModifierValidationMessage {
+                        Label(validationMessage, systemImage: "xmark.circle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.red)
                     }
                 }
             }
             .opacity(appState.isCommandModeEnabled ? 1 : 0.5)
-
-            if let validationMessage = appState.commandModeManualModifierValidationMessage {
-                Label(validationMessage, systemImage: "xmark.circle.fill")
-                    .font(.caption)
-                    .foregroundStyle(.red)
-            }
         }
     }
 
@@ -1108,20 +1143,25 @@ struct GeneralSettingsView: View {
 
     private var clipboardSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Toggle("Preserve clipboard after paste", isOn: $appState.preserveClipboard)
+            SettingsSubcard {
+                VStack(alignment: .leading, spacing: 6) {
+                    Toggle("Preserve clipboard after paste", isOn: $appState.preserveClipboard)
 
-            Text("\(AppName.displayName) will temporarily place the transcript on your clipboard to paste it, then restore whatever was there before. If you copy something else before the restore happens, \(AppName.displayName) leaves it alone.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                    Text("\(AppName.displayName) will temporarily place the transcript on your clipboard to paste it, then restore whatever was there before. If you copy something else before the restore happens, \(AppName.displayName) leaves it alone.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
 
-            Divider()
-                .padding(.vertical, 2)
+            SettingsSubcard {
+                VStack(alignment: .leading, spacing: 6) {
+                    Toggle("Say \"press enter\" to submit after paste", isOn: $appState.isPressEnterVoiceCommandEnabled)
 
-            Toggle("Say \"press enter\" to submit after paste", isOn: $appState.isPressEnterVoiceCommandEnabled)
-
-            Text("When the transcription ends with \"press enter\", \(AppName.displayName) removes those words before cleanup, pastes the remaining transcript, then presses Return.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                    Text("When the transcription ends with \"press enter\", \(AppName.displayName) removes those words before cleanup, pastes the remaining transcript, then presses Return.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
     }
 
