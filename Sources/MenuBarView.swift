@@ -10,11 +10,12 @@ struct MenuBarView: View {
 
     var body: some View {
         VStack(spacing: 4) {
-            Text("\(AppName.displayName) v\(appVersion)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 4)
+            Button {
+                // Empty action: renders as a real menu item with full system contrast.
+            } label: {
+                Text("\(AppName.displayName) v\(appVersion)")
+                    .fontWeight(.bold)
+            }
 
             Divider()
 
@@ -65,11 +66,11 @@ struct MenuBarView: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 6)
             } else {
-                Text(appState.shortcutStatusText)
-                    .foregroundStyle(.secondary)
-                    .font(.caption)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 6)
+                Button {
+                    // Same pattern as the version label.
+                } label: {
+                    Text(appState.shortcutStatusText)
+                }
             }
 
             Divider()
@@ -100,18 +101,21 @@ struct MenuBarView: View {
 
             if !appState.lastTranscript.isEmpty && !appState.isRecording && !appState.isTranscribing {
                 Divider()
-                Text(appState.lastTranscript.count > 35
-                    ? String(appState.lastTranscript.prefix(35)) + "…"
-                    : appState.lastTranscript)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 16)
-                    .lineLimit(4)
-                    .frame(maxWidth: 280, alignment: .leading)
 
                 Button("Copy Again") {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(appState.lastTranscript, forType: .string)
+                }
+
+                let truncatedTranscript = appState.lastTranscript.count > 35
+                    ? String(appState.lastTranscript.prefix(35)) + "…"
+                    : appState.lastTranscript
+                Button {
+                    // Same pattern as the version label.
+                } label: {
+                    Text("\u{201C}\(truncatedTranscript)\u{201D}")
+                        .lineLimit(4)
+                        .frame(maxWidth: 280, alignment: .leading)
                 }
             }
 
