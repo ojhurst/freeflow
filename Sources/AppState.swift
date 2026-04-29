@@ -1420,7 +1420,11 @@ final class AppState: ObservableObject, @unchecked Sendable {
         let nextToggleShortcut = role == .toggle ? binding : toggleShortcut
         let otherBinding = role == .hold ? toggleShortcut : holdShortcut
         if binding.isDisabled && otherBinding.isDisabled {
-            return "At least one shortcut must remain enabled."
+            if role == .hold {
+                return "At least one shortcut must remain enabled. Turn on Tap to Toggle before disabling Hold to Talk."
+            } else {
+                return "At least one shortcut must remain enabled. Turn on Hold to Talk before disabling Tap to Toggle."
+            }
         }
         guard !binding.conflicts(with: otherBinding) else {
             return "Hold and tap shortcuts must be distinct."
