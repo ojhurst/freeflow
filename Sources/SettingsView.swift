@@ -460,7 +460,15 @@ struct GeneralSettingsView: View {
     @State private var keyValidationError: String?
     @State private var keyValidationSuccess = false
     @State private var keyValidationProviderLabel: String?
+    @State private var pendingProviderSwitch: PendingProviderSwitch?
+    @State private var pendingValidationTask: Task<Void, Never>?
     @FocusState private var apiKeyFocused: Bool
+
+    private struct PendingProviderSwitch {
+        let preset: TranscriptionService.ProviderPreset
+        let fromProviderName: String
+        let key: String
+    }
     @State private var customVocabularyInput: String = ""
     @State private var micPermissionGranted = false
     @State private var showMutedHint = false
@@ -893,6 +901,21 @@ struct GeneralSettingsView: View {
                     .foregroundStyle(.red)
                     .font(.caption)
                     .fixedSize(horizontal: false, vertical: true)
+            } else if let pending = pendingProviderSwitch {
+                HStack(alignment: .center, spacing: 12) {
+                    Label(
+                        "\(pending.preset.displayName) key validated. Switch Base URL from \(pending.fromProviderName) to \(pending.preset.displayName)?",
+                        systemImage: "checkmark.circle.fill"
+                    )
+                    .foregroundStyle(.blue)
+                    .font(.caption)
+                    .fixedSize(horizontal: false, vertical: true)
+                    Spacer()
+                    Button("Switch to \(pending.preset.displayName)") {
+                        applyPendingProviderSwitch()
+                    }
+                    .controlSize(.small)
+                }
             } else if keyValidationSuccess {
                 let successText: String = {
                     if let provider = keyValidationProviderLabel {
@@ -925,6 +948,18 @@ struct GeneralSettingsView: View {
                             keyValidationError = nil
                             keyValidationSuccess = false
                             keyValidationProviderLabel = nil
+                            pendingProviderSwitch = nil
+                            // 400ms debounce so a paste fires auto-switch without
+                            // waiting for blur, while typing-in-progress does not
+                            // spam validation calls.
+                            pendingValidationTask?.cancel()
+                            pendingValidationTask = Task {
+                                try? await Task.sleep(nanoseconds: 400_000_000)
+                                guard !Task.isCancelled else { return }
+                                await MainActor.run {
+                                    autoSwitchProviderIfNeeded()
+                                }
+                            }
                         }
                         .opacity(shouldRevealMaskedKey ? 0 : 1)
                         .allowsHitTesting(!shouldRevealMaskedKey)
@@ -957,6 +992,11 @@ struct GeneralSettingsView: View {
                     validateAndSaveKey()
                 }
                 .disabled(apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isValidatingKey)
+            }
+            .onChange(of: apiKeyFocused) { focused in
+                if !focused {
+                    autoSwitchProviderIfNeeded()
+                }
             }
 
             DisclosureGroup(isExpanded: $advancedProviderSettingsExpanded) {
@@ -1015,6 +1055,66 @@ struct GeneralSettingsView: View {
         guard !apiKeyFocused else { return false }
         let typed = apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines)
         return typed.count >= 16
+    }
+
+    private var resolvedBaseURLInput: String {
+        let trimmed = apiBaseURLInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? AppState.defaultAPIBaseURL : trimmed
+    }
+
+    /// On blur or after a debounced paste, if the typed key's provider does
+    /// not match the configured Base URL's provider AND we have a preset for
+    /// the typed key's provider, validate the key against that preset's URL.
+    /// On success, stash a PendingProviderSwitch — the UI surfaces a Switch
+    /// button so the user explicitly opts in. No silent URL-flipping.
+    private func autoSwitchProviderIfNeeded() {
+        let key = apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty,
+              let keyProvider = TranscriptionService.detectProviderFromKey(key: key),
+              let preset = TranscriptionService.providerPreset(forName: keyProvider) else {
+            return
+        }
+        let urlProvider = TranscriptionService.detectProviderFromHost(baseURL: resolvedBaseURLInput)
+        guard urlProvider != keyProvider else { return }
+
+        let currentProviderName = urlProvider ?? "current"
+
+        isValidatingKey = true
+        keyValidationError = nil
+        keyValidationSuccess = false
+        keyValidationProviderLabel = nil
+        pendingProviderSwitch = nil
+
+        Task {
+            let errorMessage = await TranscriptionService.validateAPIKeyDetailed(key, baseURL: preset.baseURL)
+            await MainActor.run {
+                isValidatingKey = false
+                if let error = errorMessage {
+                    keyValidationError = "\(preset.displayName) rejected the key (\(error)). Kept your \(currentProviderName) settings."
+                } else {
+                    pendingProviderSwitch = PendingProviderSwitch(
+                        preset: preset,
+                        fromProviderName: currentProviderName,
+                        key: key
+                    )
+                }
+            }
+        }
+    }
+
+    private func applyPendingProviderSwitch() {
+        guard let pending = pendingProviderSwitch else { return }
+        let preset = pending.preset
+        apiBaseURLInput = preset.baseURL
+        appState.apiBaseURL = preset.baseURL
+        appState.transcriptionModel = preset.transcriptionModel
+        appState.postProcessingModel = preset.postProcessingModel
+        appState.postProcessingFallbackModel = preset.postProcessingFallbackModel
+        appState.contextModel = preset.contextModel
+        appState.apiKey = pending.key
+        keyValidationProviderLabel = preset.displayName
+        keyValidationSuccess = true
+        pendingProviderSwitch = nil
     }
 
     private func validateAndSaveKey() {
