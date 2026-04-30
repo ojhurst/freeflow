@@ -143,6 +143,7 @@ struct ProviderSettingsFields: View {
                     appState.apiBaseURL = AppState.defaultAPIBaseURL
                 }
                 .font(.caption)
+                .disabled(apiBaseURLInput == AppState.defaultAPIBaseURL)
             }
 
             if showsModelDescription {
@@ -171,6 +172,7 @@ struct ProviderSettingsFields: View {
                         appState.postProcessingModel = AppState.defaultPostProcessingModel
                     }
                     .font(.caption)
+                    .disabled(postProcessingModelDraft == AppState.defaultPostProcessingModel)
                 }
                 Text("Used for transcript cleanup and Edit Mode transforms.")
                     .font(.caption)
@@ -197,6 +199,7 @@ struct ProviderSettingsFields: View {
                         appState.postProcessingFallbackModel = AppState.defaultPostProcessingFallbackModel
                     }
                     .font(.caption)
+                    .disabled(postProcessingFallbackModelDraft == AppState.defaultPostProcessingFallbackModel)
                 }
                 Text("Used as the explicit retry model for transcript cleanup and Edit Mode transforms.")
                     .font(.caption)
@@ -223,6 +226,7 @@ struct ProviderSettingsFields: View {
                         appState.contextModel = AppState.defaultContextModel
                     }
                     .font(.caption)
+                    .disabled(contextModelDraft == AppState.defaultContextModel)
                 }
                 Text("Used for context inference, with a text-only retry when screenshot analysis fails.")
                     .font(.caption)
@@ -249,6 +253,7 @@ struct ProviderSettingsFields: View {
                         appState.transcriptionModel = AppState.defaultTranscriptionModel
                     }
                     .font(.caption)
+                    .disabled(transcriptionModelDraft == AppState.defaultTranscriptionModel)
                 }
                 Text("Used for speech-to-text transcription.")
                     .font(.caption)
@@ -913,24 +918,36 @@ struct GeneralSettingsView: View {
                     .font(.caption)
             }
 
-            DisclosureGroup(isExpanded: $advancedProviderSettingsExpanded) {
-                VStack(alignment: .leading, spacing: 12) {
-                    Divider()
-                    ProviderSettingsFields(
-                        apiBaseURLInput: $apiBaseURLInput,
-                        transcriptionAPIURLInput: $transcriptionAPIURLInput,
-                        transcriptionAPIKeyInput: $transcriptionAPIKeyInput,
-                        showsModelDescription: false
-                    )
+            VStack(alignment: .leading, spacing: 8) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        advancedProviderSettingsExpanded.toggle()
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: advancedProviderSettingsExpanded ? "chevron.down" : "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 12)
+                        Text("Advanced Provider Settings")
+                            .foregroundStyle(.primary)
+                        Spacer()
+                    }
+                    .contentShape(Rectangle())
                 }
-            } label: {
-                HStack {
-                    Text("Advanced Provider Settings")
-                    Spacer()
-                }
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    advancedProviderSettingsExpanded.toggle()
+                .buttonStyle(.plain)
+
+                if advancedProviderSettingsExpanded {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Divider()
+                        ProviderSettingsFields(
+                            apiBaseURLInput: $apiBaseURLInput,
+                            transcriptionAPIURLInput: $transcriptionAPIURLInput,
+                            transcriptionAPIKeyInput: $transcriptionAPIKeyInput,
+                            showsModelDescription: false
+                        )
+                    }
+                    .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
             .padding(.top, 4)
