@@ -517,6 +517,7 @@ struct GeneralSettingsView: View {
     @Environment(\.openURL) private var openURL
     @AppStorage("show_menu_bar_icon") private var showMenuBarIcon = true
     @State private var apiKeyInput: String = ""
+    @State private var apiKeyBackupInput: String = ""
     @State private var apiBaseURLInput: String = ""
     @State private var transcriptionAPIURLInput: String = ""
     @State private var transcriptionAPIKeyInput: String = ""
@@ -697,6 +698,9 @@ struct GeneralSettingsView: View {
                 SettingsCard("API Key", icon: "key.fill") {
                     apiKeySection
                 }
+                SettingsCard("Backup API Key", icon: "key") {
+                    apiKeyBackupSection
+                }
                 SettingsCard("Output Language", icon: "globe") {
                     outputLanguageSection
                 }
@@ -732,6 +736,7 @@ struct GeneralSettingsView: View {
         }
         .onAppear {
             apiKeyInput = appState.apiKey
+            apiKeyBackupInput = appState.apiKeyBackup
             apiBaseURLInput = appState.apiBaseURL
             transcriptionAPIURLInput = appState.transcriptionAPIURL
             transcriptionAPIKeyInput = appState.transcriptionAPIKey
@@ -1021,6 +1026,49 @@ struct GeneralSettingsView: View {
                     keyValidationSuccess = true
                 } else {
                     keyValidationError = "Validation failed. Please check your API key and provider settings, then try again."
+                }
+            }
+        }
+    }
+
+    // MARK: Backup API Key
+
+    private var apiKeyBackupSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Used automatically when the primary key hits its daily token cap. Leave blank to disable rotation.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: 8) {
+                SecureField("Paste backup API key", text: $apiKeyBackupInput)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(.body, design: .monospaced))
+
+                Button("Save") {
+                    let trimmed = apiKeyBackupInput.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if appState.apiKeyBackup != trimmed {
+                        appState.apiKeyBackup = trimmed
+                    }
+                    apiKeyBackupInput = trimmed
+                }
+                .disabled(apiKeyBackupInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+
+            // Surface the active-key indicator only when the backup is live —
+            // the default state (primary active) is the common case and
+            // would be visual noise.
+            if appState.activeKeyIsBackup {
+                HStack(spacing: 6) {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .foregroundStyle(.orange)
+                    Text("Currently using backup key")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Switch back to primary") {
+                        appState.activeKeyIsBackup = false
+                    }
+                    .controlSize(.small)
                 }
             }
         }

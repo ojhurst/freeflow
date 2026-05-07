@@ -198,6 +198,13 @@ final class AppState: ObservableObject, @unchecked Sendable {
     }
 
     private let apiKeyStorageKey = "groq_api_key"
+    // Backup Groq key for free-tier survivability — when the active key
+    // returns a 429 with `tokens per day` (per-org daily cap exhausted),
+    // the post-processing path swaps to the other key and retries once.
+    // Per-minute throttling does NOT trigger rotation; the existing model
+    // fallback handles that.
+    private let apiKeyBackupStorageKey = "groq_api_key_backup"
+    private let activeKeyIsBackupStorageKey = "groq_active_key_is_backup"
     private let apiBaseURLStorageKey = "api_base_url"
     private let transcriptionModelStorageKey = "transcription_model"
     private let transcriptionAPIURLStorageKey = "transcription_api_url"
@@ -287,6 +294,33 @@ final class AppState: ObservableObject, @unchecked Sendable {
             persistAPIKey(apiKey)
             rebuildContextService()
         }
+    }
+
+    @Published var apiKeyBackup: String {
+        didSet {
+            persistOptionalAPIValue(apiKeyBackup, account: apiKeyBackupStorageKey)
+        }
+    }
+
+    /// When true, the backup key is the live one. Flipped automatically by
+    /// `rotateAPIKeyIfDailyExhausted` when the active key returns a TPD 429.
+    /// Persists across launches so an exhausted key is not retried after
+    /// a restart.
+    @Published var activeKeyIsBackup: Bool {
+        didSet {
+            UserDefaults.standard.set(activeKeyIsBackup, forKey: activeKeyIsBackupStorageKey)
+            rebuildContextService()
+        }
+    }
+
+    /// Resolves to whichever key is currently live. Backup wins only when
+    /// activeKeyIsBackup is true AND the backup field has a value.
+    var activeAPIKey: String {
+        let trimmedBackup = apiKeyBackup.trimmingCharacters(in: .whitespacesAndNewlines)
+        if activeKeyIsBackup, !trimmedBackup.isEmpty {
+            return apiKeyBackup
+        }
+        return apiKey
     }
 
     @Published var apiBaseURL: String {
@@ -588,6 +622,8 @@ final class AppState: ObservableObject, @unchecked Sendable {
         UserDefaults.standard.removeObject(forKey: "force_http2_transcription")
         let hasCompletedSetup = UserDefaults.standard.bool(forKey: "hasCompletedSetup")
         let apiKey = Self.loadStoredAPIKey(account: apiKeyStorageKey)
+        let apiKeyBackup = Self.loadStoredAPIKey(account: apiKeyBackupStorageKey)
+        let activeKeyIsBackup = UserDefaults.standard.bool(forKey: activeKeyIsBackupStorageKey)
         let apiBaseURL = Self.loadStoredAPIBaseURL(account: "api_base_url")
         let transcriptionModel = UserDefaults.standard.string(forKey: transcriptionModelStorageKey) ?? Self.defaultTranscriptionModel
         let transcriptionAPIURL = Self.loadOptionalStoredAPIValue(account: transcriptionAPIURLStorageKey)
@@ -670,8 +706,16 @@ final class AppState: ObservableObject, @unchecked Sendable {
 
         let selectedMicrophoneID = UserDefaults.standard.string(forKey: selectedMicrophoneStorageKey) ?? "default"
 
+        // Honour persisted rotation state at launch — if the backup was the
+        // live key when the app last quit, contextService must boot with it
+        // so on-startup requests use the working key rather than the
+        // exhausted one.
+        let initialActiveKey: String = {
+            let trimmedBackup = apiKeyBackup.trimmingCharacters(in: .whitespacesAndNewlines)
+            return (activeKeyIsBackup && !trimmedBackup.isEmpty) ? apiKeyBackup : apiKey
+        }()
         self.contextService = Self.makeAppContextService(
-            apiKey: apiKey,
+            apiKey: initialActiveKey,
             baseURL: apiBaseURL,
             customContextPrompt: customContextPrompt,
             contextModel: contextModel,
@@ -679,6 +723,8 @@ final class AppState: ObservableObject, @unchecked Sendable {
         )
         self.hasCompletedSetup = hasCompletedSetup
         self.apiKey = apiKey
+        self.apiKeyBackup = apiKeyBackup
+        self.activeKeyIsBackup = activeKeyIsBackup
         self.apiBaseURL = apiBaseURL
         self.transcriptionAPIURL = transcriptionAPIURL
         self.transcriptionAPIKey = transcriptionAPIKey
@@ -774,6 +820,40 @@ final class AppState: ObservableObject, @unchecked Sendable {
             AppSettingsStorage.delete(account: apiKeyStorageKey)
         } else {
             AppSettingsStorage.save(trimmed, account: apiKeyStorageKey)
+        }
+    }
+
+    /// Inspect a thrown error from PostProcessingService. If it is a 429
+    /// whose body mentions a daily-token cap AND the other key slot has
+    /// a value, flip the active key, surface the change in the pill, and
+    /// return true so the caller can retry once with the new key.
+    /// Returns false if the error is unrelated, the other slot is empty,
+    /// or both keys are exhausted.
+    func rotateAPIKeyIfDailyExhausted(error: Error) -> Bool {
+        let message = error.localizedDescription
+        guard message.contains("429"), message.contains("tokens per day") else {
+            return false
+        }
+
+        let trimmedBackup = apiKeyBackup.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedPrimary = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if activeKeyIsBackup {
+            guard !trimmedPrimary.isEmpty else {
+                overlayManager.showError("Both Groq keys hit daily caps. Try again tomorrow.")
+                return false
+            }
+            activeKeyIsBackup = false
+            overlayManager.showError("Backup Groq key daily cap hit. Switched back to primary.")
+            return true
+        } else {
+            guard !trimmedBackup.isEmpty else {
+                overlayManager.showError("Groq daily cap hit. Set a Backup API Key in Settings to auto-rotate.")
+                return false
+            }
+            activeKeyIsBackup = true
+            overlayManager.showError("Primary Groq key daily cap hit. Switched to backup.")
+            return true
         }
     }
 
@@ -874,7 +954,7 @@ final class AppState: ObservableObject, @unchecked Sendable {
 
     func makeAppContextService() -> AppContextService {
         Self.makeAppContextService(
-            apiKey: apiKey,
+            apiKey: activeAPIKey,
             baseURL: apiBaseURL,
             customContextPrompt: customContextPrompt,
             contextModel: contextModel,
@@ -1087,7 +1167,7 @@ final class AppState: ObservableObject, @unchecked Sendable {
         )
 
         let postProcessingService = PostProcessingService(
-            apiKey: apiKey,
+            apiKey: activeAPIKey,
             baseURL: apiBaseURL,
             preferredModel: postProcessingModel,
             preferredFallbackModel: postProcessingFallbackModel
@@ -2277,6 +2357,29 @@ final class AppState: ObservableObject, @unchecked Sendable {
                 return (result.transcript, .commandModeSucceeded(invocation: invocation), result.prompt)
             } catch {
                 os_log(.error, log: recordingLog, "Edit mode failed: %{public}@", error.localizedDescription)
+                if rotateAPIKeyIfDailyExhausted(error: error) {
+                    // Active key flipped — build a fresh service so the
+                    // retry hits Groq with the new key, then attempt the
+                    // transform once more.
+                    let retryService = PostProcessingService(
+                        apiKey: activeAPIKey,
+                        baseURL: apiBaseURL,
+                        preferredModel: postProcessingModel,
+                        preferredFallbackModel: postProcessingFallbackModel
+                    )
+                    do {
+                        let retried = try await retryService.commandTransform(
+                            selectedText: selectedText,
+                            voiceCommand: rawTranscript,
+                            context: context,
+                            customVocabulary: customVocabulary,
+                            outputLanguage: outputLanguage
+                        )
+                        return (retried.transcript, .commandModeSucceeded(invocation: invocation), retried.prompt)
+                    } catch {
+                        os_log(.error, log: recordingLog, "Edit mode retry after key rotation failed: %{public}@", error.localizedDescription)
+                    }
+                }
                 return (selectedText, .commandModeFailedFallback(invocation: invocation), "")
             }
         }
@@ -2297,6 +2400,26 @@ final class AppState: ObservableObject, @unchecked Sendable {
             return (result.transcript, .postProcessingSucceeded, result.prompt)
         } catch {
             os_log(.error, log: recordingLog, "Post-processing failed: %{public}@", error.localizedDescription)
+            if rotateAPIKeyIfDailyExhausted(error: error) {
+                let retryService = PostProcessingService(
+                    apiKey: activeAPIKey,
+                    baseURL: apiBaseURL,
+                    preferredModel: postProcessingModel,
+                    preferredFallbackModel: postProcessingFallbackModel
+                )
+                do {
+                    let retried = try await retryService.postProcess(
+                        transcript: trimmedRawTranscript,
+                        context: context,
+                        customVocabulary: customVocabulary,
+                        customSystemPrompt: customSystemPrompt,
+                        outputLanguage: outputLanguage
+                    )
+                    return (retried.transcript, .postProcessingSucceeded, retried.prompt)
+                } catch {
+                    os_log(.error, log: recordingLog, "Post-processing retry after key rotation failed: %{public}@", error.localizedDescription)
+                }
+            }
             return (trimmedRawTranscript, .postProcessingFailedFallback, "")
         }
     }
@@ -2385,7 +2508,7 @@ final class AppState: ObservableObject, @unchecked Sendable {
             self.debugStatusMessage = "Transcribing audio"
 
         let postProcessingService = PostProcessingService(
-            apiKey: apiKey,
+            apiKey: activeAPIKey,
             baseURL: apiBaseURL,
             preferredModel: postProcessingModel,
             preferredFallbackModel: postProcessingFallbackModel
