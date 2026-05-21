@@ -24,6 +24,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
     case general
     case prompts
     case macros
+    case dictionary
     case runLog
     case debug
 
@@ -40,6 +41,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .general: return "General"
         case .prompts: return "Prompts"
         case .macros: return "Voice Macros"
+        case .dictionary: return "Dictionary"
         case .runLog: return "Run Log"
         case .debug: return "Debug"
         }
@@ -50,6 +52,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .general: return "gearshape"
         case .prompts: return "text.bubble"
         case .macros: return "music.mic"
+        case .dictionary: return "character.book.closed"
         case .runLog: return "clock.arrow.circlepath"
         case .debug: return "wrench.and.screwdriver"
         }
@@ -226,6 +229,7 @@ final class AppState: ObservableObject, @unchecked Sendable {
     private let alertSoundsEnabledStorageKey = "alert_sounds_enabled"
     private let soundVolumeStorageKey = "sound_volume"
     private let voiceMacrosStorageKey = "voice_macros"
+    private let correctionsStorageKey = "dictionary_corrections"
     private let commandModeEnabledStorageKey = "command_mode_enabled"
     private let commandModeStyleStorageKey = "command_mode_style"
     private let commandModeManualModifierStorageKey = "command_mode_manual_modifier"
@@ -523,6 +527,14 @@ final class AppState: ObservableObject, @unchecked Sendable {
         }
     }
 
+    @Published var corrections: [Correction] = [] {
+        didSet {
+            if let data = try? JSONEncoder().encode(corrections) {
+                UserDefaults.standard.set(data, forKey: correctionsStorageKey)
+            }
+        }
+    }
+
     @Published var isRecording = false {
         didSet {
             guard oldValue != isRecording else { return }
@@ -676,6 +688,14 @@ final class AppState: ObservableObject, @unchecked Sendable {
             initialMacros = []
         }
 
+        let initialCorrections: [Correction]
+        if let data = UserDefaults.standard.data(forKey: "dictionary_corrections"),
+           let decoded = try? JSONDecoder().decode([Correction].self, from: data) {
+            initialCorrections = decoded
+        } else {
+            initialCorrections = []
+        }
+
         let initialAccessibility = AXIsProcessTrusted()
         let initialScreenCapturePermission = CGPreflightScreenCaptureAccess()
         var removedAudioFileNames: [String] = []
@@ -733,6 +753,7 @@ final class AppState: ObservableObject, @unchecked Sendable {
         self.alertSoundsEnabled = alertSoundsEnabled
         self.soundVolume = soundVolume
         self.voiceMacros = initialMacros
+        self.corrections = initialCorrections
         self.pipelineHistory = savedHistory
         self.hasAccessibility = initialAccessibility
         self.hasScreenRecordingPermission = initialScreenCapturePermission
@@ -1132,6 +1153,7 @@ final class AppState: ObservableObject, @unchecked Sendable {
         )
         let capturedCustomVocabulary = customVocabulary
         let capturedCustomSystemPrompt = customSystemPrompt
+        let capturedCorrections = corrections
 
         Task {
             do {
@@ -1156,6 +1178,7 @@ final class AppState: ObservableObject, @unchecked Sendable {
                     postProcessingService: postProcessingService,
                     customVocabulary: capturedCustomVocabulary,
                     customSystemPrompt: capturedCustomSystemPrompt,
+                    corrections: capturedCorrections,
                     outputLanguage: self.outputLanguage
                 )
                 finalTranscript = result.finalTranscript
@@ -2362,6 +2385,7 @@ final class AppState: ObservableObject, @unchecked Sendable {
         postProcessingService: PostProcessingService,
         customVocabulary: String,
         customSystemPrompt: String,
+        corrections: [Correction],
         outputLanguage: String = ""
     ) async -> (finalTranscript: String, outcome: TranscriptProcessingOutcome, prompt: String) {
         let trimmedRawTranscript = rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2399,10 +2423,10 @@ final class AppState: ObservableObject, @unchecked Sendable {
                 customSystemPrompt: customSystemPrompt,
                 outputLanguage: outputLanguage
             )
-            return (result.transcript, .postProcessingSucceeded, result.prompt)
+            return (DictionaryEngine.apply(result.transcript, corrections: corrections), .postProcessingSucceeded, result.prompt)
         } catch {
             os_log(.error, log: recordingLog, "Post-processing failed: %{public}@", error.localizedDescription)
-            return (trimmedRawTranscript, .postProcessingFailedFallback, "")
+            return (DictionaryEngine.apply(trimmedRawTranscript, corrections: corrections), .postProcessingFailedFallback, "")
         }
     }
 
@@ -2547,6 +2571,7 @@ final class AppState: ObservableObject, @unchecked Sendable {
                         postProcessingService: postProcessingService,
                         customVocabulary: self.customVocabulary,
                         customSystemPrompt: self.customSystemPrompt,
+                        corrections: self.corrections,
                         outputLanguage: self.outputLanguage
                     )
                     try Task.checkCancellation()
