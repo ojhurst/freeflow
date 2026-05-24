@@ -107,20 +107,40 @@ Return only two sentences, no labels, no markdown, no extra commentary.
             )
         }
 
-        let appName = frontmostApp.localizedName
-        let bundleIdentifier = frontmostApp.bundleIdentifier
-        let appElement = AXUIElementCreateApplication(frontmostApp.processIdentifier)
+        let sendAppAndWindowContext = UserDefaults.standard.object(forKey: "send_app_and_window_context") == nil
+            ? true
+            : UserDefaults.standard.bool(forKey: "send_app_and_window_context")
 
-        let windowTitle = focusedWindowTitle(from: appElement) ?? appName
-        let selectedText = selectedText(from: appElement)
+        let appElement = AXUIElementCreateApplication(frontmostApp.processIdentifier)
+        let internalWindowTitle = focusedWindowTitle(from: appElement) ?? frontmostApp.localizedName
+
         let screenshot = captureActiveWindowScreenshot(
             processIdentifier: frontmostApp.processIdentifier,
             appElement: appElement,
-            focusedWindowTitle: windowTitle
+            focusedWindowTitle: internalWindowTitle
         )
+
+        let appName: String?
+        let bundleIdentifier: String?
+        let windowTitle: String?
+        let selectedText: String?
+        if sendAppAndWindowContext {
+            appName = frontmostApp.localizedName
+            bundleIdentifier = frontmostApp.bundleIdentifier
+            windowTitle = internalWindowTitle
+            selectedText = self.selectedText(from: appElement)
+        } else {
+            os_log(.info, log: Self.contextLog, "app/window context skipped — disabled in settings (Send app and window info = off)")
+            appName = nil
+            bundleIdentifier = nil
+            windowTitle = nil
+            selectedText = nil
+        }
+
         let currentActivity: String
         let contextPrompt: String?
-        if !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && (sendAppAndWindowContext || screenshot.dataURL != nil) {
             if let result = await inferActivityWithLLM(
                 appName: appName,
                 bundleIdentifier: bundleIdentifier,
@@ -141,6 +161,9 @@ Return only two sentences, no labels, no markdown, no extra commentary.
                 )
                 contextPrompt = nil
             }
+        } else if !sendAppAndWindowContext && screenshot.dataURL == nil {
+            currentActivity = "You are dictating. App and window context are disabled in settings, and no screenshot was captured."
+            contextPrompt = nil
         } else {
             currentActivity = fallbackCurrentActivity(
                 appName: appName,

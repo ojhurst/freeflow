@@ -1703,6 +1703,16 @@ struct PromptsSettingsView: View {
                 }
             }
 
+            SettingsSubcard {
+                VStack(alignment: .leading, spacing: 6) {
+                    Toggle("Send app and window info", isOn: $appState.sendAppAndWindowContext)
+
+                    Text("When on, \(AppName.displayName) sends the active app name, window title, and any selected text to the model so it can tailor the transcript. Off keeps the model blind to which app or window you are in — strongest privacy, but cleanup tone and proper-noun spelling lose context. Turn off both this and the screenshot toggle for fully blind dictation.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             Text("Controls how \(AppName.displayName) infers your current activity from app metadata and screenshots.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
